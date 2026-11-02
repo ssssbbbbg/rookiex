@@ -34,17 +34,45 @@ jobs:
       - name: 生成 Gradle Wrapper
         run: gradle wrapper --gradle-version 8.7 --distribution-type bin
 
-      - name: 构建 Release
+      - name: 检查密钥
+        run: |
+          if [ -f keystore/rookiex.jks ]; then
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/keystore/rookiex.jks" >> "$GITHUB_ENV"
+            echo "密钥存在: $(stat -c%s keystore/rookiex.jks) bytes"
+          else
+            echo "::warning::keystore/rookiex.jks 缺失，产物不签名"
+          fi
+
+      - name: 构建并签名
+        env:
+          KEYSTORE_PASSWORD: rain123456
+          KEY_ALIAS: rookiex
+          KEY_PASSWORD: rain123456
         run: |
           set -o pipefail
           gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: 校验签名
+        if: success()
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "APK: $APK"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          {
+            echo ""
+            echo "### 签名校验"
+            "$BT/apksigner" verify --verbose "$APK" 2>&1 | head -20
+            echo ""
+            echo "### 证书"
+            "$BT/apksigner" verify --print-certs "$APK" 2>&1 | head -8
+          } | tee -a build.log
 
       - name: 构建摘要
         if: always()
         run: |
           {
-            echo "## 构建结果"
             echo ""
+            echo "## 构建结果"
             echo "提交: ${{ github.sha }}"
             echo "时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo ""
@@ -64,6 +92,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: RookieX-apk
+          name: RookieX-signed-apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 90

@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.application")
+    alias(libs.plugins.android.application)
 }
 
 android {
@@ -25,19 +25,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // NPatch 模块不需要打包 xposed_init 之外的额外逻辑，保持精简
     packaging {
         resources.excludes += setOf("META-INF/*.kotlin_module")
     }
 }
 
 dependencies {
-    // LSPosed API：只用来做 Xposed 入口判断，NPatch 兼容
+    // Xposed API 由 NPatch/LSPatch 运行时提供，编译期只做引用
     compileOnly("de.robv.android.xposed:api:82")
-}
-
-// 把 assets/xposed_init 打进去，NPatch 靠它找入口类
-tasks.register<Copy>("mergeXposedInit") {
-    from("src/main/assets")
-    into(layout.buildDirectory.dir("intermediates/assets/release"))
 }

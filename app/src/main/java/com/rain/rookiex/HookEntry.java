@@ -65,7 +65,7 @@ public class HookEntry implements IXposedHookLoadPackage {
         // 兜底：Application.onCreate 可能已过，直接取当前 Application
         try {
             Object app = XposedHelpers.callStaticMethod(
-                    Class.forName("android.app.ActivityThread", false, lp.classLoader),
+                    Class.forName("android.app.ActivityThread", false, lpparam.classLoader),
                     "currentApplication");
             if (app instanceof Application && appCtx == null) {
                 appCtx = (Application) app;

@@ -1,0 +1,69 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          echo "== runner =="
+          uname -a
+          java -version 2>&1
+          echo "== 磁盘 =="
+          df -h
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+          cache-read-only: false
+
+      - name: 生成 Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.7 --distribution-type bin
+
+      - name: 构建 Release
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: 构建摘要
+        if: always()
+        run: |
+          {
+            echo "## 构建结果"
+            echo ""
+            echo "提交: ${{ github.sha }}"
+            echo "时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
+            echo '### 产物'
+            find app/build/outputs -name '*.apk' -exec ls -lh {} \; 2>/dev/null || echo "无 APK 产出"
+          } | tee -a build.log
+
+      - name: 上传构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.sha }}
+          path: build.log
+          retention-days: 90
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: RookieX-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 90

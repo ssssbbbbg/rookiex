@@ -35,16 +35,21 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class HookEntry implements IXposedHookLoadPackage {
 
     private static final String TAG = "RookieX";
-    private static final String TARGET_PKG = "com.rookie.v.func.pro";
+    private static final String TARGET_PKG = "com.rookie.v";
+
+    // 两种包名都认：NPatch 集成模式下 packageName 可能是 com.rookie.v
+    private static boolean isTarget(String pkg) {
+        return pkg != null && (pkg.equals(TARGET_PKG) || pkg.startsWith("com.rookie.v"));
+    }
 
     private static Writer logWriter;
     private static Context appCtx;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
-        if (!TARGET_PKG.equals(lpparam.packageName)) return;
-
-        XposedBridge.log(TAG + ": 命中目标包 " + lpparam.packageName);
+        // 无条件先打一行：证明模块真的进来了
+        XposedBridge.log(TAG + ": handleLoadPackage pkg=" + lpparam.packageName);
+        if (!isTarget(lpparam.packageName)) return;
 
         XposedHelpers.findAndHookMethod(
                 Application.class, "onCreate", new XC_MethodHook() {
@@ -52,10 +57,25 @@ public class HookEntry implements IXposedHookLoadPackage {
                     protected void afterHookedMethod(MethodHookParam param) {
                         appCtx = (Application) param.thisObject;
                         openLog();
-                        log("=== 进程启动，模块就位 ===");
+                        log("=== 进程启动，模块就位，pkg=" + lpparam.packageName + " ===");
                         dumpMmkvDir();
                     }
                 });
+
+        // 兜底：Application.onCreate 可能已过，直接取当前 Application
+        try {
+            Object app = XposedHelpers.callStaticMethod(
+                    Class.forName("android.app.ActivityThread", false, lp.classLoader),
+                    "currentApplication");
+            if (app instanceof Application && appCtx == null) {
+                appCtx = (Application) app;
+                openLog();
+                log("=== 兜底取到 Application，模块就位 ===");
+                dumpMmkvDir();
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": 兜底取 Application 失败 " + t);
+        }
 
         hookCurrentProxyUri(lpparam);
         hookNodeConfig(lpparam);
